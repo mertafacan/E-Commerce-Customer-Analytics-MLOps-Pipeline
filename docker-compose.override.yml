@@ -1,0 +1,4 @@
+networks:
+  airflow:
+    name: airflow_network
+    driver: bridge

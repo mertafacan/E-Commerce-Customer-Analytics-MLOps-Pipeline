@@ -1,0 +1,4 @@
+[core]
+    remote = origin
+['remote "origin"']
+    url = https://dagshub.com/mertafacan/E-Commerce-Customer-Analytics-MLOps-Pipeline.dvc

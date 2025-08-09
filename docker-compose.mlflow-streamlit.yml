@@ -1,0 +1,42 @@
+services:
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: mlflow_server
+    command: >
+      mlflow server
+      --backend-store-uri file:///mlruns
+      --host 0.0.0.0
+      --port 5000
+      --serve-artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns
+      - ./mlartifacts:/mlartifacts
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow_server:5000
+    networks:
+      - airflow_network
+
+  streamlit:
+    build:
+      context: ./streamlit
+      dockerfile: Dockerfile
+    container_name: streamlit_app
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data:ro
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow_server:5000
+    depends_on:
+      - mlflow
+    networks:
+      - airflow_network
+
+networks:
+  airflow_network:
+    external: true
+    name: airflow_network

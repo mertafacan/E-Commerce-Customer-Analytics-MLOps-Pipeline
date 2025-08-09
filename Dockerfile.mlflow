@@ -1,0 +1,14 @@
+# Use the ready-made MLflow image as base image
+FROM ghcr.io/mlflow/mlflow:v3.2.0
+
+# To update Python packages and change sklearn version
+USER root
+
+# Update pip
+RUN pip install --upgrade pip
+
+# Remove current scikit-learn version and install 1.7.0
+RUN pip uninstall scikit-learn -y && pip install scikit-learn==1.7.0
+
+# Ensure other required packages are installed
+RUN pip install --no-cache-dir -r /tmp/requirements.txt || true

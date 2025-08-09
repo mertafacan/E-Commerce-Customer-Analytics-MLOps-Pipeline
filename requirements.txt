@@ -1,1 +1,10 @@
 # Astro Runtime includes the following pre-installed providers packages: https://www.astronomer.io/docs/astro/runtime-image-architecture#provider-packages
+pyspark
+scikit-learn==1.7.0
+pandas
+numpy
+xgboost
+lifetimes
+scipy
+pyarrow
+mlflow==3.2.0
