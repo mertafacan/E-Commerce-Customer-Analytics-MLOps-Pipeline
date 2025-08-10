@@ -8,21 +8,7 @@ import mlflow
 import cloudpickle as pickle
 from lifetimes import BetaGeoFitter, GammaGammaFitter
 from lifetimes.utils import summary_data_from_transaction_data
-
-# Environment variables
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5000")
-EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT", "CLV_Analysis")
-INPUT_PARQUET = os.getenv("CLEAN_PARQUET_FILE", "data/cleaned_online_retail_II.parquet")
-OUTPUT_PARQUET = os.getenv("CLV_OUTPUT_FILE", "data/clv_analysis.parquet")
-
-BGF_PENALIZER = float(os.getenv("BGF_PENALIZER", "0.001"))
-GGF_PENALIZER = float(os.getenv("GGF_PENALIZER", "0.01"))
-DISCOUNT_RATE = float(os.getenv("CLV_DISCOUNT_RATE", "0.01"))
-
-DAYS_PER_MONTH = float(os.getenv("DAYS_PER_MONTH", "30"))
-
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-mlflow.set_experiment(EXPERIMENT_NAME)
+from omegaconf import DictConfig
 
 def load_data(path: str) -> pd.DataFrame:
     """Loads data from parquet file and converts InvoiceDate to datetime."""
@@ -33,7 +19,7 @@ def load_data(path: str) -> pd.DataFrame:
     df["InvoiceDate"] = pd.to_datetime(df["InvoiceDate"], errors="coerce")
     return df
 
-def fit_models_and_compute_clv(df: pd.DataFrame) -> pd.DataFrame:
+def fit_models_and_compute_clv(df: pd.DataFrame, cfg: DictConfig) -> pd.DataFrame:
     """
     Fits lifetimes models for CLV calculation and computes 3, 6, 12-month CLV.
     """
@@ -50,12 +36,12 @@ def fit_models_and_compute_clv(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # BetaGeoFitter: fit frequency/recency model
-    bgf = BetaGeoFitter(penalizer_coef=BGF_PENALIZER)
+    bgf = BetaGeoFitter(penalizer_coef=cfg.data.clv.bgf_penalizer)
     bgf.fit(summary["frequency"], summary["recency"], summary["T"])
 
     # GammaGammaFitter: fit monetary model only for frequency > 0
     positive = summary["frequency"] > 0
-    ggf = GammaGammaFitter(penalizer_coef=GGF_PENALIZER)
+    ggf = GammaGammaFitter(penalizer_coef=cfg.data.clv.ggf_penalizer)
     ggf.fit(summary.loc[positive, "frequency"], summary.loc[positive, "monetary_value"])
 
     # Calculate 3, 6 and 12-month CLV
@@ -65,9 +51,9 @@ def fit_models_and_compute_clv(df: pd.DataFrame) -> pd.DataFrame:
         summary["recency"],
         summary["T"],
         summary["monetary_value"],
-        time=int(3 * DAYS_PER_MONTH),
+        time=int(3 * cfg.data.clv.days_per_month),
         freq="D",
-        discount_rate=DISCOUNT_RATE,
+        discount_rate=cfg.data.clv.discount_rate,
     )
 
     summary["clv_6_months"] = ggf.customer_lifetime_value(
@@ -76,9 +62,9 @@ def fit_models_and_compute_clv(df: pd.DataFrame) -> pd.DataFrame:
         summary["recency"],
         summary["T"],
         summary["monetary_value"],
-        time=int(6 * DAYS_PER_MONTH),
+        time=int(6 * cfg.data.clv.days_per_month),
         freq="D",
-        discount_rate=DISCOUNT_RATE,
+        discount_rate=cfg.data.clv.discount_rate,
     )
 
     summary["clv_12_months"] = ggf.customer_lifetime_value(
@@ -87,32 +73,46 @@ def fit_models_and_compute_clv(df: pd.DataFrame) -> pd.DataFrame:
         summary["recency"],
         summary["T"],
         summary["monetary_value"],
-        time=int(12 * DAYS_PER_MONTH),
+        time=int(12 * cfg.data.clv.days_per_month),
         freq="D",
-        discount_rate=DISCOUNT_RATE,
+        discount_rate=cfg.data.clv.discount_rate,
     )
 
     return summary, bgf, ggf
 
-def run():
+def clv_analysis(cfg: DictConfig, **kwargs):
     """
     Runs the entire CLV pipeline, logs with MLflow, and saves outputs.
     """
-    print("Starting — MLflow tracking:", MLFLOW_TRACKING_URI)
-    with mlflow.start_run(run_name=os.getenv("MLFLOW_RUN_NAME", "CLV_Lifetimes")):
+    # Environment variables from Hydra configuration
+    mlflow_tracking_uri = cfg.mlflow.tracking_uri
+    experiment_name = cfg.mlflow.experiments.clv_analysis
+    input_parquet = cfg.data.paths.clean_parquet_file
+    output_parquet = cfg.data.paths.clv_output_file
+    
+    bgf_penalizer = cfg.data.clv.bgf_penalizer
+    ggf_penalizer = cfg.data.clv.ggf_penalizer
+    discount_rate = cfg.data.clv.discount_rate
+    days_per_month = cfg.data.clv.days_per_month
+
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+    mlflow.set_experiment(experiment_name)
+    
+    print("Starting — MLflow tracking:", mlflow_tracking_uri)
+    with mlflow.start_run(run_name=cfg.mlflow_run_names.clv_analysis):
         mlflow.log_params(
             {
-                "input_parquet": INPUT_PARQUET,
-                "output_parquet": OUTPUT_PARQUET,
-                "bgf_penalizer": BGF_PENALIZER,
-                "ggf_penalizer": GGF_PENALIZER,
-                "discount_rate": DISCOUNT_RATE,
-                "days_per_month": DAYS_PER_MONTH,
+                "input_parquet": input_parquet,
+                "output_parquet": output_parquet,
+                "bgf_penalizer": bgf_penalizer,
+                "ggf_penalizer": ggf_penalizer,
+                "discount_rate": discount_rate,
+                "days_per_month": days_per_month,
             }
         )
 
-        df = load_data(INPUT_PARQUET)
-        clv_df, bgf, ggf = fit_models_and_compute_clv(df)
+        df = load_data(input_parquet)
+        clv_df, bgf, ggf = fit_models_and_compute_clv(df, cfg)
 
         # Log CLV and customer metrics
         mlflow.log_metric("avg_clv_3m", float(clv_df["clv_3_months"].mean()))
@@ -135,7 +135,7 @@ def run():
             mlflow.log_artifact(str(ggf_path), artifact_path="lifetimes_models")
 
         # Save CLV output and log as artifact
-        out_p = Path(OUTPUT_PARQUET)
+        out_p = Path(output_parquet)
         out_p.parent.mkdir(parents=True, exist_ok=True)
         clv_df.to_parquet(out_p, index=False)
         mlflow.log_artifact(str(out_p), artifact_path="clv_outputs")
@@ -149,5 +149,15 @@ def run():
 
     return str(out_p)
 
-if __name__ == "__main__":
-    run()
+if __name__ == '__main__':
+    from hydra import compose, initialize
+    from hydra.core.global_hydra import GlobalHydra
+
+    # Clear any existing Hydra instance to avoid conflicts
+    GlobalHydra.instance().clear()
+
+    # Initialize Hydra with configuration path
+    initialize(version_base=None, config_path="conf")
+    cfg = compose(config_name="config")
+
+    clv_analysis(cfg)

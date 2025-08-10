@@ -1,0 +1,63 @@
+# MLflow Configuration
+mlflow:
+  tracking_uri: "http://mlflow_server:5000"
+  experiments:
+    churn_prediction: "Churn_Prediction"
+    data_preparation: "Data_Preparation"
+    rfm_segmentation: "RFM_Segmentation"
+    clv_analysis: "CLV_Analysis"
+    ab_testing: "AB_Testing"
+  models:
+    churn_xgb: "churn_xgboost"
+    churn_rf: "churn_randomforest"
+    rfm_kmeans: "rfm_kmeans_clustering"
+
+# Data Configuration
+data:
+  paths:
+    raw_data: "/usr/local/airflow/data/online_retail_II.csv"
+    clean_parquet_dir: "/usr/local/airflow/data/cleaned_online_retail_II_parquet"
+    clean_parquet_file: "/usr/local/airflow/data/cleaned_online_retail_II.parquet"
+    rfm_output_file: "/usr/local/airflow/data/rfm_analysis.parquet"
+    clv_output_file: "/usr/local/airflow/data/clv_analysis.parquet"
+  
+  cleaning:
+    min_quantity: 0
+    min_price: 0.0
+  
+  rfm:
+    n_clusters: 4
+    n_quantiles: 5
+  
+  clv:
+    bgf_penalizer: 0.001
+    ggf_penalizer: 0.01
+    discount_rate: 0.01
+    days_per_month: 30
+  
+  ab_testing:
+    seed: 42
+    sample_frac: 1.0
+
+# Model Configuration
+model:
+  test_size: 0.2
+  random_state: 42
+
+# Streamlit Configuration
+streamlit:
+  rfm_experiment: "RFM_Segmentation"
+  clv_experiment: "CLV_Analysis"
+  rfm_registered_model: "rfm_kmeans_clustering"
+  churn_xgb_model: "churn_xgboost"
+  churn_rf_model: "churn_randomforest"
+  rfm_output_file: "/usr/local/airflow/data/rfm_analysis.parquet"
+  clean_parquet_file: "/usr/local/airflow/data/cleaned_online_retail_II.parquet"
+
+# Default MLflow run names
+mlflow_run_names:
+  data_preparation: "Data_Preparation"
+  churn_prediction: "Churn_Prediction"
+  rfm_segmentation: "RFM_Segmentation"
+  clv_analysis: "CLV_Lifetimes"
+  ab_testing: "AB_Testing"

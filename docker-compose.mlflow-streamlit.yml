@@ -15,20 +15,23 @@ services:
     volumes:
       - ./mlruns:/mlruns
       - ./mlartifacts:/mlartifacts
+      - ./include/conf:/app/conf:ro
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5000
+      - HYDRA_CONFIG_PATH=/app/conf
     networks:
       - airflow_network
 
   streamlit:
     build:
-      context: ./streamlit
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: streamlit/Dockerfile
     container_name: streamlit_app
     ports:
       - "8501:8501"
     volumes:
       - ./data:/app/data:ro
+      - ./include/conf:/app/conf:ro
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5000
     depends_on:

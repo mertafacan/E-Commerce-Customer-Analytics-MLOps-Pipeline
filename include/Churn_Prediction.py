@@ -10,20 +10,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import roc_auc_score, accuracy_score
 from xgboost import XGBClassifier
 from mlflow.models import infer_signature
+from omegaconf import DictConfig
 
 # Optional: Suppress GitPython warning
 os.environ.setdefault("GIT_PYTHON_REFRESH", "quiet")
-
-# Environment variables
-MLFLOW_TRACKING_URI = os.getenv('MLFLOW_TRACKING_URI', 'http://mlflow_server:5000')
-EXPERIMENT_NAME     = os.getenv('MLFLOW_EXPERIMENT', 'Churn_Prediction')
-DATA_DF_FILE        = os.getenv('DATA_DF_FILE', 'data/cleaned_online_retail_II.parquet')
-DATA_RFM_FILE       = os.getenv('DATA_RFM_FILE', 'data/rfm_analysis.parquet')
-TEST_SIZE           = float(os.getenv('TEST_SIZE', 0.2))
-RANDOM_STATE        = int(os.getenv('RANDOM_STATE', 42))
-
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-mlflow.set_experiment(EXPERIMENT_NAME)
 
 
 def load_data(path_df: str, path_rfm: str):
@@ -65,18 +55,18 @@ def prepare_data(df: pd.DataFrame, rfm_df: pd.DataFrame):
     return X, y
 
 
-def split_data(X, y):
+def split_data(X, y, test_size: float, random_state: int):
     """Train/test split."""
     return train_test_split(
         X, y,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_STATE,
+        test_size=test_size,
+        random_state=random_state,
         stratify=y
     )
 
 
 def train_and_log_model(model_name: str, model_params: dict, model_class,
-                        X_train, X_test, y_train, y_test):
+                        X_train, X_test, y_train, y_test, test_size: float, random_state: int):
     """Train a model pipeline, log metrics and model with MLflow."""
     with mlflow.start_run(run_name=f'{model_name}_Churn',
                           nested=(mlflow.active_run() is not None)):
@@ -113,38 +103,51 @@ def train_and_log_model(model_name: str, model_params: dict, model_class,
         )
 
 
-def run():
-    """Main pipeline."""
-    with mlflow.start_run(run_name=os.getenv('MLFLOW_RUN_NAME', 'Churn_Prediction')):
+def train_churn_model(cfg: DictConfig, **kwargs):
+    """Main pipeline for churn prediction model training."""
+    mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
+    mlflow.set_experiment(cfg.mlflow.experiments.churn_prediction)
+
+    with mlflow.start_run(run_name=cfg.mlflow_run_names.churn_prediction):
         mlflow.log_params({
-            'data_df_file': DATA_DF_FILE,
-            'data_rfm_file': DATA_RFM_FILE,
-            'test_size': TEST_SIZE,
-            'random_state': RANDOM_STATE
+            'data_df_file': cfg.data.paths.clean_parquet_file,
+            'data_rfm_file': cfg.data.paths.rfm_output_file,
+            'test_size': cfg.model.test_size,
+            'random_state': cfg.model.random_state
         })
 
         # load & prepare
-        df, rfm_df = load_data(DATA_DF_FILE, DATA_RFM_FILE)
+        df, rfm_df = load_data(cfg.data.paths.clean_parquet_file, cfg.data.paths.rfm_output_file)
         X, y = prepare_data(df, rfm_df)
-        X_train, X_test, y_train, y_test = split_data(X, y)
+        X_train, X_test, y_train, y_test = split_data(X, y, cfg.model.test_size, cfg.model.random_state)
 
         # random forest
         rf_params = {
             'n_estimators': 200, 'max_depth': None,
-            'random_state': RANDOM_STATE, 'n_jobs': -1
+            'random_state': cfg.model.random_state, 'n_jobs': -1
         }
         train_and_log_model('randomforest', rf_params, RandomForestClassifier,
-                            X_train, X_test, y_train, y_test)
+                            X_train, X_test, y_train, y_test, cfg.model.test_size, cfg.model.random_state)
 
         # xgboost
         xgb_params = {
             'n_estimators': 300, 'learning_rate': 0.08, 'max_depth': 4,
             'subsample': 0.8, 'colsample_bytree': 0.8,
-            'random_state': RANDOM_STATE, 'n_jobs': -1, 'eval_metric': 'logloss'
+            'random_state': cfg.model.random_state, 'n_jobs': -1, 'eval_metric': 'logloss'
         }
         train_and_log_model('xgboost', xgb_params, XGBClassifier,
-                            X_train, X_test, y_train, y_test)
+                            X_train, X_test, y_train, y_test, cfg.model.test_size, cfg.model.random_state)
 
 
 if __name__ == '__main__':
-    run()
+    from hydra import compose, initialize
+    from hydra.core.global_hydra import GlobalHydra
+
+    # Clear any existing Hydra instance to avoid conflicts
+    GlobalHydra.instance().clear()
+
+    # Initialize Hydra with configuration path
+    initialize(version_base=None, config_path="conf")
+    cfg = compose(config_name="config")
+
+    train_churn_model(cfg)

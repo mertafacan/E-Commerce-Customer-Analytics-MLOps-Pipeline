@@ -5,18 +5,7 @@ import numpy as np
 import mlflow
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
-
-# Environment variables
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5000")
-EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT", "RFM_Segmentation")
-CLEAN_PARQUET_FILE = os.getenv("CLEAN_PARQUET_FILE", "data/cleaned_online_retail_II.parquet")
-RFM_OUTPUT_FILE = os.getenv("RFM_OUTPUT_FILE", "data/rfm_analysis.parquet")
-N_CLUSTERS = int(os.getenv("N_CLUSTERS", "4"))
-N_QUANTILES = int(os.getenv("N_QUANTILES", "5"))
-
-# --- MLflow setup ---
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-mlflow.set_experiment(EXPERIMENT_NAME)
+from omegaconf import DictConfig
 
 
 def load_data(path: str) -> pd.DataFrame:
@@ -99,27 +88,31 @@ def add_additional_features(rfm: pd.DataFrame, df: pd.DataFrame, analyse_date) -
     return rfm
 
 
-def run():
+def rfm_analysis_and_segmentation(cfg: DictConfig, **kwargs):
     """Main pipeline function"""
-    print("Starting — MLflow tracking:", MLFLOW_TRACKING_URI)
-    with mlflow.start_run(run_name=os.getenv("MLFLOW_RUN_NAME", "RFM_Segmentation")):
+    # --- MLflow setup ---
+    mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
+    mlflow.set_experiment(cfg.mlflow.experiments.rfm_segmentation)
+
+    print("Starting — MLflow tracking:", cfg.mlflow.tracking_uri)
+    with mlflow.start_run(run_name=cfg.mlflow_run_names.rfm_segmentation):
         mlflow.log_params({
-            "clean_parquet_file": CLEAN_PARQUET_FILE,
-            "rfm_output_file": RFM_OUTPUT_FILE,
-            "n_clusters": N_CLUSTERS,
-            "n_quantiles": N_QUANTILES,
+            "clean_parquet_file": cfg.data.paths.clean_parquet_file,
+            "rfm_output_file": cfg.data.paths.rfm_output_file,
+            "n_clusters": cfg.data.rfm.n_clusters,
+            "n_quantiles": cfg.data.rfm.n_quantiles,
         })
 
         # Data loading and RFM calculation
-        df = load_data(CLEAN_PARQUET_FILE)
+        df = load_data(cfg.data.paths.clean_parquet_file)
         rfm, analyse_date = calculate_rfm_metrics(df)
-        rfm = calculate_rfm_scores(rfm, N_QUANTILES)
+        rfm = calculate_rfm_scores(rfm, cfg.data.rfm.n_quantiles)
         
         # Segmentation
         rfm["Segment"] = rfm["RFM_Score"].apply(segment_maker)
         
         # Clustering
-        rfm, kmeans, rfm_scaled = perform_clustering(rfm, N_CLUSTERS)
+        rfm, kmeans, rfm_scaled = perform_clustering(rfm, cfg.data.rfm.n_clusters)
         
         # Additional features
         rfm = add_additional_features(rfm, df, analyse_date)
@@ -129,7 +122,7 @@ def run():
         rfm["Persona"] = rfm["Cluster"].map(persona_map)
         
         # Metrics
-        mlflow.log_param("n_clusters", N_CLUSTERS)
+        mlflow.log_param("n_clusters", cfg.data.rfm.n_clusters)
         mlflow.log_metric("inertia", float(kmeans.inertia_))
         mlflow.log_metric("total_customers", int(len(rfm)))
         mlflow.log_metric("avg_recency", float(rfm["Recency"].mean()))
@@ -166,7 +159,7 @@ def run():
         )
         
         # Save output
-        out_p = os.path.join(os.getcwd(), RFM_OUTPUT_FILE)
+        out_p = os.path.join(os.getcwd(), cfg.data.paths.rfm_output_file)
         os.makedirs(os.path.dirname(out_p), exist_ok=True)
         rfm.to_parquet(out_p, index=False)
         mlflow.log_artifact(out_p, artifact_path="rfm_outputs")
@@ -180,6 +173,15 @@ def run():
 
     return str(out_p)
 
+if __name__ == '__main__':
+    from hydra import compose, initialize
+    from hydra.core.global_hydra import GlobalHydra
 
-if __name__ == "__main__":
-    run()
+    # Clear any existing Hydra instance to avoid conflicts
+    GlobalHydra.instance().clear()
+
+    # Initialize Hydra with configuration path
+    initialize(version_base=None, config_path="conf")
+    cfg = compose(config_name="config")
+
+    rfm_analysis_and_segmentation(cfg)

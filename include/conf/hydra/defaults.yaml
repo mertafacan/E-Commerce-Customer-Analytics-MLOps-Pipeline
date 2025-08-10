@@ -1,0 +1,4 @@
+# Default configuration for Hydra
+defaults:
+  - override hydra/launcher: basic_launcher
+  - config

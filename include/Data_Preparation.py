@@ -5,18 +5,7 @@ import mlflow
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 import urllib.request
-
-# Environment variables
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5000")
-EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT", "Data_Preparation")
-RAW_DATA_PATH = os.getenv("RAW_DATA_PATH", "/usr/local/airflow/data/online_retail_II.csv")
-CLEAN_PARQUET_DIR = os.getenv("CLEAN_PARQUET_DIR", "/usr/local/airflow/data/cleaned_online_retail_II_parquet")
-CLEAN_PARQUET_FILE = os.getenv("CLEAN_PARQUET_FILE", "/usr/local/airflow/data/cleaned_online_retail_II.parquet")
-MIN_QUANTITY = int(os.getenv("MIN_QUANTITY", "0"))
-MIN_PRICE = float(os.getenv("MIN_PRICE", "0"))
-
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-mlflow.set_experiment(EXPERIMENT_NAME)
+from omegaconf import DictConfig
 
 def get_spark(app_name: str = "RetailDataCleaning") -> SparkSession:
     """Creates a Spark session."""
@@ -82,23 +71,29 @@ def write_single_parquet(df, output_dir: str, single_output: str) -> str:
     copyfile(part_files[0], target)
     return target
 
-def run():
+def data_preparation(cfg: DictConfig, **kwargs):
     """Main pipeline function: executes data reading, cleaning, transformation, and saving operations."""
-    with mlflow.start_run(run_name=os.getenv("MLFLOW_RUN_NAME", "Data_Preparation")):
+    
+    # Set MLflow tracking URI and experiment name
+    mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
+    mlflow.set_experiment(cfg.mlflow.experiments.data_preparation)
+
+    with mlflow.start_run(run_name=cfg.mlflow_run_names.data_preparation):
         mlflow.log_params({
-            "raw_data_path": RAW_DATA_PATH,
-            "clean_parquet_dir": CLEAN_PARQUET_DIR,
-            "clean_parquet_file": CLEAN_PARQUET_FILE,
-            "min_quantity": MIN_QUANTITY,
-            "min_price": MIN_PRICE,
+            "raw_data_path": cfg.data.paths.raw_data,
+            "clean_parquet_dir": cfg.data.paths.clean_parquet_dir,
+            "clean_parquet_file": cfg.data.paths.clean_parquet_file,
+            "min_quantity": cfg.data.cleaning.min_quantity,
+            "min_price": cfg.data.cleaning.min_price,
         })
+        
         spark = get_spark()
         spark.sparkContext.setLogLevel("WARN")
 
-        df = load_raw_data(spark, RAW_DATA_PATH)
-        df = clean_data(df, MIN_QUANTITY, MIN_PRICE)
+        df = load_raw_data(spark, cfg.data.paths.raw_data)
+        df = clean_data(df, cfg.data.cleaning.min_quantity, cfg.data.cleaning.min_price)
         df = add_total_price(df)
-        single_path = write_single_parquet(df, CLEAN_PARQUET_DIR, CLEAN_PARQUET_FILE)
+        single_path = write_single_parquet(df, cfg.data.paths.clean_parquet_dir, cfg.data.paths.clean_parquet_file)
 
         mlflow.log_metric("total_records", int(df.count()))
         mlflow.log_artifact(single_path, artifact_path="data_outputs")
@@ -108,5 +103,15 @@ def run():
 
     return str(single_path)
 
-if __name__ == "__main__":
-    run()
+if __name__ == '__main__':
+    from hydra import compose, initialize
+    from hydra.core.global_hydra import GlobalHydra
+
+    # Clear any existing Hydra instance to avoid conflicts
+    GlobalHydra.instance().clear()
+
+    # Initialize Hydra with configuration path
+    initialize(version_base=None, config_path="conf")
+    cfg = compose(config_name="config")
+
+    data_preparation(cfg)

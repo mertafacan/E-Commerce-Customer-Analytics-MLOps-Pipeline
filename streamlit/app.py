@@ -1,6 +1,16 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from hydra import compose, initialize
+from omegaconf import DictConfig, OmegaConf
+from hydra.core.global_hydra import GlobalHydra
+
+# Clear any existing Hydra instance to avoid conflicts
+GlobalHydra.instance().clear()
+
+# Initialize Hydra
+initialize(version_base=None, config_path="conf")
+cfg = compose(config_name="config")
 
 from model_utils import (
     load_churn_xgb, load_churn_rf, load_rfm_kmeans,
@@ -12,15 +22,15 @@ st.set_page_config(page_title="E-Commerce Customer Analytics", page_icon="📊")
 
 # ---- Model Load and Cache ----
 @st.cache_resource(show_spinner=False)
-def cached_churn_xgb(): return load_churn_xgb()
+def cached_churn_xgb(_cfg): return load_churn_xgb(_cfg)
 @st.cache_resource(show_spinner=False)
-def cached_churn_rf(): return load_churn_rf()
+def cached_churn_rf(_cfg): return load_churn_rf(_cfg)
 @st.cache_resource(show_spinner=False)
-def cached_rfm_model(): return load_rfm_kmeans()
+def cached_rfm_model(_cfg): return load_rfm_kmeans(_cfg)
 @st.cache_resource(show_spinner=False)
-def cached_clv_models(): return load_clv_models()
+def cached_clv_models(_cfg): return load_clv_models(_cfg)
 @st.cache_data(show_spinner=False)
-def cached_rfm_thresholds(): return load_rfm_thresholds_from_mlflow()
+def cached_rfm_thresholds(_cfg): return load_rfm_thresholds_from_mlflow(_cfg)
 
 # ---- Sidebar: cache panel ----
 with st.sidebar:
@@ -69,7 +79,7 @@ def churn_analysis():
 
     if st.button("Predict", type="primary", use_container_width=True):
         with st.spinner("Calculating..."):
-            model = cached_churn_xgb() if model_choice == "XGBoost" else cached_churn_rf()
+            model = cached_churn_xgb(_cfg=cfg) if model_choice == "XGBoost" else cached_churn_rf(_cfg=cfg)
             churn_p = predict_churn(model, frequency, monetary, tenure, avg_order_value)
         m1, m2 = st.columns([1,1])
         m1.metric("Churn Probability", f"{churn_p:.2%}")
@@ -80,7 +90,7 @@ def churn_analysis():
 # ---------- RFM Page ----------
 def rfm_analysis():
     st.header("📊 RFM Analysis and Segmentation")
-    thr = cached_rfm_thresholds()
+    thr = cached_rfm_thresholds(_cfg=cfg)
     c1, c2, c3 = st.columns([1,1,1])
     with c1:
         recency = st.number_input("Recency (days)", 0, 5000, max(1, int(float(thr["recency"][1]))))
@@ -89,7 +99,7 @@ def rfm_analysis():
     with c3:
         monetary = st.number_input("Monetary (£)", 0.0, 1_000_000.0, max(0.0, float(thr["monetary"][1])), step=1.0)
 
-    r, f, m = calculate_rfm_scores(recency, frequency, monetary)
+    r, f, m = calculate_rfm_scores(cfg, recency, frequency, monetary)
     seg = segment_maker(f"{r}{f}{m}")
 
     k1, k2, k3, k4 = st.columns([1,1,1,1.3])
@@ -97,7 +107,7 @@ def rfm_analysis():
 
     if st.button("Persona Prediction (KMeans)", type="primary", use_container_width=True):
         with st.spinner("Calculating..."):
-            kmeans = cached_rfm_model()
+            kmeans = cached_rfm_model(_cfg=cfg)
             cluster = predict_rfm_cluster(kmeans, recency, frequency, monetary)
         persona_map = {0: "At-Risk & Lost", 1: "Loyal & Valuable", 2: "Champions", 3: "Whales / B2B"}
         st.success(f"Cluster {cluster} • {persona_map.get(cluster, 'Unknown')}")
@@ -118,7 +128,7 @@ def clv_analysis():
 
     if calculate:
         with st.spinner("Calculating..."):
-            bgf, ggf = cached_clv_models()
+            bgf, ggf = cached_clv_models(_cfg=cfg)
             periods = [3, 6, 12]
             clv_vals = [predict_clv(bgf, ggf, frequency, recency, T, monetary, p) for p in periods]
 

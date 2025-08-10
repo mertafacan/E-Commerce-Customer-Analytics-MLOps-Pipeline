@@ -3,17 +3,18 @@ import numpy as np
 import pandas as pd
 from scipy.stats import mannwhitneyu
 import mlflow
+from omegaconf import DictConfig
 
-# Environment variables
-EXPERIMENT_NAME = os.getenv("AB_EXPERIMENT_NAME", "AB_Testing")
-RFM_PARQUET = os.getenv("RFM_PARQUET_FILE", "data/rfm_analysis.parquet")
-SEED = int(os.getenv("AB_SEED", "42"))
-SAMPLE_FRAC = float(os.getenv("AB_SAMPLE_FRAC", "1.0"))
+def run_ab_test(cfg: DictConfig, **kwargs):
+    # Environment variables from Hydra configuration
+    EXPERIMENT_NAME = cfg.mlflow.experiments.ab_testing
+    RFM_PARQUET = cfg.data.paths.rfm_output_file
+    SEED = cfg.data.ab_testing.seed
+    SAMPLE_FRAC = cfg.data.ab_testing.sample_frac
 
-mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5000"))
-mlflow.set_experiment(EXPERIMENT_NAME)
+    mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
+    mlflow.set_experiment(EXPERIMENT_NAME)
 
-def run():
     # Data
     rfm = pd.read_parquet(RFM_PARQUET)
     df = rfm[rfm["Segment"] == "Promising Customers"].copy()
@@ -48,8 +49,8 @@ def run():
 
     # 5) Required MLflow logs (minimum set)
     with mlflow.start_run(run_name="ab_run"):
-        mlflow.log_param("seed", SEED)
-        mlflow.log_param("sample_frac", SAMPLE_FRAC)
+        mlflow.log_param("seed", cfg.data.ab_testing.seed)
+        mlflow.log_param("sample_frac", cfg.data.ab_testing.sample_frac)
         mlflow.log_metric("p_value", float(p_value))
         mlflow.log_metric("a_n", a_n)
         mlflow.log_metric("b_n", b_n)
@@ -59,5 +60,15 @@ def run():
 
     print(f"[A/B] N(A)={a_n}, N(B)={b_n}, p-value={p_value:.4f}, uplift={uplift*100:.1f}%")
 
-if __name__ == "__main__":
-    run()
+if __name__ == '__main__':
+    from hydra import compose, initialize
+    from hydra.core.global_hydra import GlobalHydra
+
+    # Clear any existing Hydra instance to avoid conflicts
+    GlobalHydra.instance().clear()
+
+    # Initialize Hydra with configuration path
+    initialize(version_base=None, config_path="conf")
+    cfg = compose(config_name="config")
+
+    run_ab_test(cfg)

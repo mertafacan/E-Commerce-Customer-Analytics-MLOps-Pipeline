@@ -16,11 +16,15 @@ COPY requirements.txt .
 RUN uv pip install --system -r requirements.txt
 
 # Copy application code (app and helper module)
-COPY app.py .
-COPY model_utils.py .
+COPY streamlit/app.py .
+COPY streamlit/model_utils.py .
+
+# Copy Hydra configuration
+COPY include/conf /app/conf
 
 # Port required for Streamlit to run
 EXPOSE 8501
 
 # Start the Streamlit application
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+

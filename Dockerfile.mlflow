@@ -12,3 +12,6 @@ RUN pip uninstall scikit-learn -y && pip install scikit-learn==1.7.0
 
 # Ensure other required packages are installed
 RUN pip install --no-cache-dir -r /tmp/requirements.txt || true
+
+# Copy Hydra configuration
+COPY ./include/conf /app/conf

@@ -8,18 +8,7 @@ import pandas as pd
 import mlflow
 from mlflow.tracking import MlflowClient
 from mlflow.artifacts import download_artifacts
-
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5000")
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-
-RFM_EXPERIMENT_NAME = os.getenv("RFM_EXPERIMENT", "RFM_Segmentation")
-CLV_EXPERIMENT_NAME = os.getenv("CLV_EXPERIMENT", "CLV_Analysis")
-RFM_REGISTERED_MODEL = os.getenv("RFM_REGISTERED_MODEL", "rfm_kmeans_clustering")
-CHURN_XGB_MODEL = os.getenv("CHURN_XGB_MODEL", "churn_xgboost")
-CHURN_RF_MODEL = os.getenv("CHURN_RF_MODEL", "churn_randomforest")
-
-LOCAL_RFM_PARQUET = os.getenv("RFM_OUTPUT_FILE", "data/rfm_analysis.parquet")
-LOCAL_CLEAN_PARQUET = os.getenv("CLEAN_PARQUET_FILE", "data/cleaned_online_retail_II.parquet")
+from omegaconf import DictConfig, OmegaConf
 
 _rfm_thresholds_cache: Optional[Dict[str, list]] = None
 
@@ -73,7 +62,7 @@ def _compute_thresholds_from_clean_parquet(path: str) -> Dict[str, list]:
     )
     return _compute_thresholds_from_rfm_df(rfm)
 
-def load_rfm_thresholds_from_mlflow() -> Dict[str, list]:
+def load_rfm_thresholds_from_mlflow(cfg: DictConfig) -> Dict[str, list]:
     """
     Loads RFM thresholds with MLflow and local fallbacks, caches in memory.
     """
@@ -83,7 +72,7 @@ def load_rfm_thresholds_from_mlflow() -> Dict[str, list]:
 
     client = MlflowClient()
     try:
-        exp = client.get_experiment_by_name(RFM_EXPERIMENT_NAME)
+        exp = client.get_experiment_by_name(cfg.mlflow.experiments.rfm_segmentation)
         if exp:
             try:
                 runs = client.search_runs([exp.experiment_id], order_by=["start_time DESC"], max_results=1)
@@ -105,12 +94,12 @@ def load_rfm_thresholds_from_mlflow() -> Dict[str, list]:
     except Exception:
         pass
 
-    p1 = Path(LOCAL_RFM_PARQUET)
+    p1 = Path(cfg.streamlit.rfm_output_file)
     if p1.exists():
         thr = _compute_thresholds_from_rfm_parquet(str(p1))
         _rfm_thresholds_cache = thr
         return thr
-    p2 = Path(LOCAL_CLEAN_PARQUET)
+    p2 = Path(cfg.streamlit.clean_parquet_file)
     if p2.exists():
         thr = _compute_thresholds_from_clean_parquet(str(p2))
         _rfm_thresholds_cache = thr
@@ -118,11 +107,11 @@ def load_rfm_thresholds_from_mlflow() -> Dict[str, list]:
 
     raise RuntimeError("RFM thresholds not found. Log RFM step to MLflow first.")
 
-def calculate_rfm_scores(recency: float, frequency: float, monetary: float) -> Tuple[int, int, int]:
+def calculate_rfm_scores(cfg, recency: float, frequency: float, monetary: float) -> Tuple[int, int, int]:
     """
     Converts continuous values to 1-5 R,F,M scores based on thresholds.
     """
-    thr = load_rfm_thresholds_from_mlflow()
+    thr = load_rfm_thresholds_from_mlflow(cfg)
 
     r_q = thr["recency"]
     if recency <= r_q[0]: r = 5
@@ -176,31 +165,31 @@ def _load_registered_model(model_name: str, version: str = "latest"):
     except Exception:
         return None
 
-def load_churn_xgb():
+def load_churn_xgb(cfg: DictConfig):
     """
     Helper function to load XGBoost churn model.
     """
-    return _load_registered_model(CHURN_XGB_MODEL)
+    return _load_registered_model(cfg.mlflow.models.churn_xgb)
 
-def load_churn_rf():
+def load_churn_rf(cfg: DictConfig):
     """
     Helper function to load RandomForest churn model.
     """
-    return _load_registered_model(CHURN_RF_MODEL)
+    return _load_registered_model(cfg.mlflow.models.churn_rf)
 
-def load_rfm_kmeans():
+def load_rfm_kmeans(cfg: DictConfig):
     """
     Helper function to load RFM KMeans model.
     """
-    return _load_registered_model(RFM_REGISTERED_MODEL)
+    return _load_registered_model(cfg.mlflow.models.rfm_kmeans)
 
-def load_clv_models():
+def load_clv_models(cfg: DictConfig):
     """
     Loads BGF and GGF models from the last run in CLV experiment.
     """
     try:
         client = MlflowClient()
-        exp = client.get_experiment_by_name(CLV_EXPERIMENT_NAME)
+        exp = client.get_experiment_by_name(cfg.mlflow.experiments.clv_analysis)
         if not exp: return None, None
         runs = client.search_runs([exp.experiment_id], order_by=["start_time DESC"], max_results=1)
         if not runs: return None, None
