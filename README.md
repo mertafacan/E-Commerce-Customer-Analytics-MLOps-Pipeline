@@ -32,27 +32,22 @@
 This project is a comprehensive **MLOps pipeline** for e-commerce customer analytics. Using the Online Retail II dataset, it analyzes customer behavior, performs customer segmentation, predicts churn, and calculates Customer Lifetime Value (CLV). All analyses run through an **automated pipeline** orchestrated by an **Airflow DAG**, with **MLflow** providing experiment tracking and model management, and are presented via a **modern Streamlit interface**.
 
 <div align="center">
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="assets/Streamlit.gif" alt="Project Demo - Streamlit" style="border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);" width="100%"/><br/>
-      <span style="display: inline-block; margin-top: 8px; font-size: 1.1em; font-weight: 600; color: #FF4B4B;">
-        🚀 Streamlit Interface
-      </span>
-    </td>
-    <td align="center" width="50%">
-      <img src="assets/Mlflow-Airflow.gif" alt="Project Demo - MLflow & Airflow" style="border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);" width="100%"/><br/>
-      <span style="display: inline-block; margin-top: 8px; font-size: 1.1em; font-weight: 600; color: #017CEE;">
-        ⚡ MLflow & Airflow Orchestration
-      </span>
-    </td>
-  </tr>
-</table>
-
+  <table>
+    <tr valign="top">
+      <td align="center" width="50%">
+        <img src="assets/Streamlit.gif" alt="Streamlit Demo" height="400">
+        <br>
+        <sub><b>🚀 Streamlit Interface</b></sub>
+      </td>
+      <td align="center" width="50%">
+        <img src="assets/Mlflow-Airflow.gif" alt="MLflow & Airflow Demo" height="400">
+        <br>
+        <sub><b>⚡ MLflow & Airflow Orchestration</b></sub>
+      </td>
+    </tr>
+  </table>
 </div>
 
----
 ## 🎯 Key Features & Goals
 
 * **Data-Driven Decisions:** Analyze customer behavior to generate insights that help improve business strategy.
@@ -61,7 +56,6 @@ This project is a comprehensive **MLOps pipeline** for e-commerce customer analy
 * **Robust Model Management:** Version and track model performance, parameters, and artifacts with MLflow.
 * **Scalable Infrastructure:** Build a system capable of processing large-scale data using Spark and containerization.
 
----
 ## ✨ Tech Stack
 
 This section lists the core technologies and methodologies underpinning the project.
@@ -90,7 +84,6 @@ This section lists the core technologies and methodologies underpinning the proj
 ### 🌐 Presentation Layer
 
 * **Streamlit:** Serve model predictions through an interactive web UI.
----
 
 
 ## 🚀 Setup & Run
@@ -142,48 +135,12 @@ Once the project is up, the following services will be available:
 * **Streamlit App:** [http://localhost:8501](http://localhost:8501)
 * **Airflow UI:** [http://localhost:8080](http://localhost:8080)
 
----
 ## 🏗️ Project Architecture
 
 ###    🏛️ Overall Architecture
 
 
-```mermaid
-graph TB
-    subgraph "Data Layer"
-        A[Online Retail II<br/>Dataset] --> B[DVC<br/>Data Versioning]
-        B --> C[Spark<br/>Data Processing]
-    end
-
-    subgraph "Processing Layer"
-        C --> D[Airflow DAG<br/>Asset-based Pipeline]
-        D --> E[Data Preparation]
-        D --> F[RFM Analysis]
-        D --> G[Churn Prediction]
-        D --> H[CLV Analysis]
-        D --> I[A/B Testing]
-    end
-
-    subgraph "Model Layer"
-        E --> J[MLflow<br/>Model Management]
-        F --> J
-        G --> J
-        H --> J
-        I --> J
-    end
-
-    subgraph "Application Layer"
-        J --> K[Streamlit<br/>Web UI]
-        K --> L[Churn Prediction]
-        K --> M[RFM Analysis]
-        K --> N[CLV Prediction]
-        K --> O[A/B Test Results]
-    end
-
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style K fill:#f9f,stroke:#333,stroke-width:2px
-    style J fill:#bbf,stroke:#333,stroke-width:2px
-```
+# replace
 
 
 ### 📁 Directory Structure
@@ -231,7 +188,6 @@ E-Commerce-Customer-Analytics-MLOps-Pipeline/
 └── tests/
 ```
 
----
 ## 🧩 Core Components & Responsibilities
 
 This section provides a detailed overview of the key components that make up this MLOps pipeline and their specific responsibilities within the system.
@@ -274,7 +230,6 @@ The containerization components enable environment-agnostic deployment and consi
 
 * **`pyproject.toml` and `requirements.txt`**: Define the project's Python libraries and dependencies, ensuring consistent environments across development and production.
 
----
 ## 📬 Contact
 
 Mert Afacan – [https://www.linkedin.com/in/mert-afacan/](https://www.linkedin.com/in/mert-afacan/) – [mert0afacan@gmail.com](mailto:mert0afacan@gmail.com)
