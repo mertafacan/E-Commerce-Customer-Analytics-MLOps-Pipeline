@@ -139,9 +139,10 @@ Once the project is up, the following services will be available:
 
 ###    🏛️ Overall Architecture
 
-
-# replace
-
+<div align="center">
+  <img src="assets/architecture.gif" alt="Project Architecture Overview" height="400">
+  <br>
+</div>
 
 ### 📁 Directory Structure
 
